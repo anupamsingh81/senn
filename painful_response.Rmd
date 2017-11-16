@@ -1,0 +1,154 @@
+---
+title: "Dichotomania and Responder Fallacy"
+author: "Anupam kumar Singh, MD"
+date: "8 November 2017"
+output: html_document
+---
+
+
+Stephen senn has written [very eloquently](https://errorstatistics.com/2016/08/02/s-senn-painful-dichotomies-guest-post/) about consequences of dichotomizing a continuous measure and often illustrates it with terrible use of dichotomy in a cochrane review where it was "claimed" that [only one in 10 patients](http://uk.cochrane.org/news/featured-review-oral-paracetamol-treatment-acute-episodic-tension-type-headache-adults) respond to paracetamol.
+
+
+He considers a counterfactual thought experiment where he simulates 6000 headaches which follow an exponential distrbtuion with mean of 3 hours and tries to treat every headache with paracetamol  and placebo.
+
+Suppose Paracetamol reduced every headache by three-fourth. But if we use improper international society of headache criteria as response being "pain-free at two hours", we will reach this erroneous conclusion that only one patient out of 10 tension-headaches responds to paracetamol.
+
+I found it very instructive and tried to redo the graph in R
+
+
+```{r,warning=FALSE}
+library(tidyverse)
+set.seed(7)
+placebo=rexp(n = 6000, rate = 1/2.97) # sampling an exponential distribution of headache with mean 2.97
+paracetamol = placebo*0.755 # suppose paracetamol reduced duration of each headache almose 3/4th () , Thus paracetamol has benefit of 45 minutes for each headache
+
+duration = c(placebo,paracetamol)
+probability = c(ecdf(placebo)(placebo),ecdf(paracetamol)(paracetamol)) # calculating cumulative probabilities
+
+group= c(rep("Placebo",6000),rep("Paracetamol",6000))
+headache= data.frame(duration,probability,group)
+
+a=ecdf(placebo)(2)
+b=ecdf(paracetamol)(2)
+
+
+
+
+headache  %>%  ggplot(aes(x=duration,y=probability,colour=group))+
+  geom_line()+xlim(0,7) + geom_vline(xintercept = 2, linetype="dashed")+ 
+  geom_hline(yintercept = a,linetype="dashed")+geom_hline(yintercept = b,linetype="dashed")+ 
+  annotate("text",x=6,y=a-0.05,label=paste(round(a,2),""))+ 
+  annotate("text",x=6,y=a+0.05,label=paste(round(b,2),""))+
+  labs(title= "Probability Of Response to Headache treatment",
+y= "Probability of Response(Cumulative)",
+x= " Time(hours)",
+caption = "Data from Painful Dichotomies-Stephen Senn")
+
+
+
+
+
+```
+
+"The curve given for placebo is what we would expect to find for the simple exponential model if it were the case that mean time to response were 2.97 hours when a patient was given placebo. The curve for paracetamol has a mean of 2.24 hours. It is important to understand that this is perfectly compatible with this being the long term average response time (that is to say averaged over many many headaches) for every patient and this means that any patient at any time feeling the symptoms of headache could expect to shorten that headache by 2.97-2.24=0.73 hrs or just under 45 minutes." - Senn
+
+Lets now try to understand what happens when we dichotomize oucome to pain free at two hours and classifying those who became pain free at 2 hours as responders and others as non responders. 
+
+```{r}
+headache1 = headache %>% mutate(responder=ifelse(duration<=2,"responder","non-responder"))
+
+```
+
+
+First, we sample 20 headaches of our counterfactual experiment which were treated with both paracetamol and placebo. we see each headache duration decreased by three-fourth.
+
+
+```{r}
+data_frame(placebo= headache1$duration[1:20], paracetamol= headache1$duration[6001:6020]) %>% 
+  mutate(id=row_number()) %>%  # add row_number as id
+  gather(group,duration,-id) %>%  # note - sign to keep out id, key value neednt be explicit
+  mutate(responder= if_else(duration<2,"responder","non-responder")) %>% 
+ 
+  ggplot( aes(x=as.factor(id), y=duration)) + geom_point(aes(color=group)) + geom_line()+ labs( title= "Counter Factual trial",
+                                                                                                             x = "Patient",
+                                                                                                             y = "Duration of Headache")+ coord_flip()
+                        
+```
+
+Here we can determine individual response . As each headache has been treated twice.
+
+But since we will not be able to see such a trial where each headache is twice treated ( can be approximated with repeated cross over trial) , here is what we see in real life
+```{r}
+data_frame(placebo= headache1$duration[1:20], paracetamol= headache1$duration[6001:6020]) %>% 
+  mutate(id=row_number()) %>%  # add row_number as id
+  gather(group,duration,-id) %>%  # note - sign to keep out id, key value neednt be explicit
+  mutate(responder= if_else(duration<2,"responder","non-responder")) %>% 
+  #filter((group=="paracetamol"&id%%2==0)|(group=="placebo"&id%%2!=0)) %>% 
+  slice(sample(n(),20)) %>% 
+  ggplot( aes(x=as.factor(id), y=duration)) + geom_point(aes(color=group)) + labs( title= "Parallel trial",
+                                                                                                             x = "Patient",
+                                                                                                             y = "Duration of Headache")+ coord_flip()
+                                                                                                                 
+
+    
+```
+
+
+
+
+Here we randomly erased some variables, so now individual response is difficult to determine, all we can comment on is on average.
+
+
+Now if we engage in responder fallacy, we will be calculating 
+```{r}
+difference  = ecdf(paracetamol)(2)-ecdf(placebo)(2)
+NNT = 1/difference
+
+difference
+NNT
+```
+
+Thus difference in proportions is around 11% and NNT to be pain free at two hours  is 9 , we can see this fallacy even as we know headache has decreased by three-fourth the amount.
+
+
+Same headache cant be treated twice hence lets randomly sample 3000 patients like in parallel trial
+
+```{r,warning=FALSE}
+placebo = sample(placebo,size=3000) # 
+paracetamol  = sample(paracetamol,size=3000)
+duration = c(placebo,paracetamol)
+probability = c(ecdf(placebo)(placebo),ecdf(paracetamol)(paracetamol))
+
+group= c(rep("Placebo",3000),rep("Paracetamol",3000))
+headache= data.frame(duration,probability,group)
+
+a=ecdf(placebo)(2)
+b=ecdf(paracetamol)(2)
+
+headache  %>%  ggplot(aes(x=duration,y=probability,colour=group))+
+  geom_line()+xlim(0,7) + geom_vline(xintercept = 2, linetype="dashed")+ 
+  geom_hline(yintercept = a,linetype="dashed")+geom_hline(yintercept = b,linetype="dashed")+ 
+  annotate("text",x=6,y=a-0.05,label=paste(round(a,2),""))+ 
+  annotate("text",x=6,y=a+0.05,label=paste(round(b,2),""))+
+  labs(title= "Probability Of Response to Headache treatment",
+y= "Probability of Response(Cumulative)",
+x= " Time(hours)",
+caption = "Data from Painful Dichotomies-Stephen Senn")
+
+
+  
+```
+
+
+
+
+
+# Key Points
+1. Dichotomization of continuous measures and NNT leads to loss of information and should be avoided and used as last resort.
+2. Diffcult to determine individual response in trial, can be teased through repeated measures cross-over trials which are not possible in many cases and diffcult to do.
+3. Parallel group trials measure averages and relative effects.  We should use response carefully n sparingly.
+4. Dont use this "response" to find predictors(gene,big data) etc for it.
+
+### References
+1.[Mastering Variation](https://errorstatistics.files.wordpress.com/2016/07/senn-2016-statistics_in_medicine.pdf)
+2.[Myths of Personalised Medicine](https://errorstatistics.com/2014/07/26/s-senn-responder-despondency-myths-of-personalized-medicine-guest-post/)

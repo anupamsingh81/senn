@@ -1,0 +1,77 @@
+---
+title: "Regression to mean"
+author: "Anupam kumar Singh, MD"
+date: "7 November 2017"
+output: html_document
+---
+
+
+```{r}
+baseline = rnorm(1000,90,11)
+simcor = function(x, r,m,s){ r2 = r**2 
+ve = 1-r2 
+SD = sqrt(ve) 
+e = rnorm(length(x), mean=0, sd=SD) 
+y = r*x + e  
+y1 = m+y*s
+
+return(y1) } 
+
+
+x=scale(baseline)
+
+outcome=simcor(x=x,r=0.8,m=90,s=11)
+```
+
+
+
+```{r}
+sd(outcome)
+mean(outcome)
+cor(baseline,outcome)
+t.test(baseline,outcome)
+```
+
+```{r}
+df = data.frame(baseline,outcome)
+
+library(tidyverse)
+
+df = df %>% mutate(group = case_when(
+  baseline<95 & outcome <95 ~ "normotensives",
+   baseline>95 & outcome <95 ~ "inconsistent",
+  baseline<95 & outcome >95 ~ "inconsistent",
+  baseline>95 & outcome >95 ~ "hypertensives"
+  
+))
+
+```
+
+
+```{r}
+df %>% ggplot(aes(baseline,outcome,color=group))+geom_point()+geom_hline(yintercept=95)+geom_vline(xintercept=95)
+
+```
+
+
+```{r}
+df %>% select(baseline,outcome) %>% gather(key="group",value="DBP") %>% ggplot(aes(y=DBP,x=group))+geom_boxplot()
+```
+
+
+```{r}
+df %>% filter(baseline>95) %>% ggplot(aes(baseline,outcome,color=group))+geom_point() +geom_hline(yintercept=95)+geom_vline(xintercept=95)
+
+```
+
+```{r}
+df1 = df %>% filter(baseline>95)
+t.test(df1$outcome,df1$baseline)
+```
+
+```{r}
+df %>% select(baseline,outcome) %>% filter(baseline>95) %>% gather(key="group",value="DBP") %>% ggplot(aes(y=DBP,x=group))+geom_boxplot()
+```
+
+
+
