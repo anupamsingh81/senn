@@ -1,0 +1,173 @@
+---
+title: "Regression to mean"
+author: "Anupam kumar Singh, MD"
+date: "7 November 2017"
+output: html_document
+---
+
+
+This demonstration is based on regression to mean example by stephen senn in a [must read](https://www.google.co.in/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&cad=rja&uact=8&ved=0ahUKEwjC55u09vLXAhWJtY8KHRrfAtAQFggoMAA&url=http%3A%2F%2Fwww.dcscience.net%2FSenn-2009-Three-things-medical-writers.pdf&usg=AOvVaw3_pin00nZyrwodEaQvuNpq) paper by him.
+
+Let us randomly sample baseline BP of 1000 patients with mean diastolic BP 90 mm Hg and standard deviation 11 mm Hg.
+
+```{r}
+set.seed(7)
+baseline = rnorm(1000,90,11)
+
+```
+
+Now let's generate an outcome BP at second time point which is correlated (r=0.8) with first baseline measurement and has same mean diastolic BP and standard deviation  . you can also assume it is the second measurement after giving placebo.
+```{r}
+simcor = function(x, r,m,s){ r2 = r**2 
+ve = 1-r2 
+SD = sqrt(ve) 
+e = rnorm(length(x), mean=0, sd=SD) 
+y = r*x + e  
+y1 = m+y*s
+
+return(y1) } 
+
+
+x=scale(baseline)
+
+outcome=simcor(x=x,r=0.8,m=90,s=11)
+```
+
+
+Just to cross check, let's see mean , sd and correlation od outcome(post) with baseline(pre).
+```{r}
+sd(outcome)
+mean(outcome)
+cor(baseline,outcome)
+
+```
+
+
+Let's run a paired t-test between pre and post which will be non-significant as expected since mean DBPand sd are same and measurements are correlated
+```{r}
+t.test(baseline,outcome,paired=TRUE)
+```
+
+
+Let's generate a dataframe of these baseline and outcome variable and generate two more variables 
+1. delta : difference in baseline and outcome
+2. group : 1000 patients divided in three groups
+a) hypertensives : Both baseline and outcome with DBP>95(arbitrary cut off)
+b) inconsistent : Either baseline our outcome less than 95 on one occasion and higher than 95 on other
+c) normotensives : Both baseline and outcome less than 95 on both occasions.
+
+```{r,warning=FALSE}
+df = data.frame(baseline,outcome)
+
+library(dplyr)
+library(ggplot2)
+
+df = df %>% mutate(group = case_when(
+  baseline<95 & outcome <95 ~ "normotensives",
+   baseline>95 & outcome <95 ~ "inconsistent",
+  baseline<95 & outcome >95 ~ "inconsistent",
+  baseline>95 & outcome >95 ~ "hypertensives"
+  
+), delta=outcome-baseline)
+
+```
+
+Let's see a histogram of difference pre-post(baeline and outcome)
+
+```{r,warning=FALSE}
+ggplot(df,aes(x=delta))+geom_histogram(fill="blue")+geom_vline(xintercept=0)+geom_density()
+
+```
+
+Let's see a kernel density estimate
+
+```{r}
+ggplot(df,aes(x=delta))+geom_density()
+```
+
+Let's see frequency polygon based on groups
+
+```{r}
+ggplot(df,aes(x=delta))+geom_freqpoly(aes(color=group))
+```
+
+Let's see summary stats of difference
+
+```{r}
+df %>% select(delta) %>% summary()
+```
+
+
+
+
+Let's see a groupwise summary based on cut-off of 95
+
+```{r}
+library(tidyverse)
+df %>% group_by(group) %>% summarize(n=n(),meanbaseline=mean(baseline),sdbaseline=sd(baseline),meanoutcome=mean(outcome),sdoutcome=sd(outcome),meandelta=mean(delta),sddelta=sd(delta)) %>%rownames_to_column %>% 
+   gather(var, value, -rowname) %>% 
+   spread(rowname, value) 
+```
+
+
+
+Lets visualise a plot of baseline vs outcome
+
+```{r}
+df %>% ggplot(aes(baseline,outcome,color=group))+geom_point()+geom_hline(yintercept=95)+geom_vline(xintercept=95)
+
+```
+
+
+Let's look at boxplot of pre(baseline) and post(outcome)
+
+```{r}
+library(tidyr)
+df %>% select(baseline,outcome) %>% gather(key="group",value="DBP") %>% ggplot(aes(y=DBP,x=group))+geom_boxplot()
+```
+
+Now let's select only patients with DBP>95 this would be similar to hypertensive only patients entering an arm of control trial
+```{r}
+df %>% filter(baseline>95) %>% ggplot(aes(baseline,outcome,color=group))+geom_point() +geom_hline(yintercept=95)+geom_vline(xintercept=95)
+
+```
+
+```{r}
+df %>% filter(baseline>95) %>% select(delta) %>% summary()
+```
+Thus we see in this selected group, outcome is lower than baseline as compared to previous group due to selection
+
+Let's see histogram and density plots
+
+```{r}
+df %>% filter(baseline>95) %>% ggplot(aes(x=delta))+geom_histogram(fill="blue")+geom_vline(xintercept=0)+geom_density()
+```
+
+
+
+```{r}
+df %>% filter(baseline>95) %>% ggplot(aes(x=delta))+geom_density()
+```
+
+We run the paired t test and see that it is significant now.
+
+```{r}
+df1 = df %>% filter(baseline>95)
+t.test(df1$outcome,df1$baseline,paired = TRUE)
+```
+
+```{r}
+df %>% select(baseline,outcome) %>% filter(baseline>95) %>% gather(key="group",value="DBP") %>% ggplot(aes(y=DBP,x=group))+geom_boxplot()
+```
+
+
+### KEY POINTS
+
+1. Scientists should be very careful while interpreting effect of drug/change in parameter based on a single arm
+2. Control group is important to address regression to mean.
+3. Regression to mean accounts contributes a lot to so-called "placebo effect" or "alternative medicine".
+
+## Reference
+1. [Three things that every medical writer should know about statistics](https://www.google.co.in/url?sa=t&rct=j&q=&esrc=s&source=web&cd=2&cad=rja&uact=8&ved=0ahUKEwjC55u09vLXAhWJtY8KHRrfAtAQFggxMAE&url=http%3A%2F%2Feprints.gla.ac.uk%2F8107%2F1%2Fid8107.pdf&usg=AOvVaw1Y1KazmlhlVrw03fawlUrZ)
+
+
