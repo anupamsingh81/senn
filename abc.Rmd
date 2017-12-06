@@ -69,7 +69,7 @@ So How do we determine response by crossover trials ..
 
 Let's consider a crossover  trial with first crossover with active-placebo difference of 0.5 with sd of 0.2 L .
 
-Now suppose we arbitrarily classify responder as those having more than 0.3 L increase
+Now suppose we arbitrarily classify responder as those having more than 0.3 L increase in FEV1
 
 
 ```{r}
@@ -77,17 +77,18 @@ set.seed(7)
 crossover1 = rnorm(1000,0.5,0.2)
 
 kil = ecdf(crossover1)(0.3)*100
-data_frame(crossover1 = rnorm(1000,0.5,0.2)) %>% 
-  ggplot(aes(crossover1))+geom_histogram(fill="blue")+geom_vline(xintercept = 0.3)+
-  annotate("text",x=1,y=90,label=paste(kil," % non-responders"))
+data_frame(crossover1 = rnorm(1000,0.5,0.2)) %>% mutate(x=if_else(crossover1<0.3,"non-responder","responder")) %>% 
+  ggplot(aes(crossover1,fill=factor(x)))+geom_histogram()+geom_vline(xintercept = 0.3)+ # change color of histogram
+  annotate("text",x=1,y=90,label=paste(kil," % non-responders"))+
+  theme(legend.title=element_blank()) # remove legend
 
 
 ```
 
-Thus we see that while every patient has some increase almost 14.8% will be labeelel non-responder due to arbitrary dichotomization , one of the reasons to avoid dichomotization which can lead to erroneous conclusions.
+Thus we see that while every patient has some increase in FEV1, almost 14.8% will be labelled  non-responder due to arbitrary dichotomization , one of the reasons to avoid dichomotization which can lead to erroneous conclusions.
 
 
-So how do we judge response then let's see the second  crossover trial in which there is an element of response i.e. the placebo-active difference is highly correlated(r=0.9) with first crossover trial 
+So how do we judge response then let's see the second  crossover trial in which there is an **element of response** i.e. the placebo-active difference is highly correlated(r=0.9) with first crossover trial 
 
 ```{r}
 simcor = function(x, r,m,s){ r2 = r**2 
@@ -107,16 +108,32 @@ crossover2 = simcor(x=x,r=0.9,m=0.5,s=0.2)
 
 kil1 = ecdf(crossover2)(0.3)*100
 
-data_frame(crossover2 = as.vector(crossover2)) %>% 
-  ggplot(aes(crossover2))+geom_histogram(fill="blue")+geom_vline(xintercept = 0.3)+
-  annotate("text",x=1,y=90,label=paste(kil1," % non-responders"))
+data_frame(crossover2 = as.vector(crossover2)) %>% mutate(x=if_else(crossover2<0.3,"non-responder","responder")) %>% # as.vector for crossover2
+  ggplot(aes(crossover2,fill=factor(x)))+geom_histogram()+geom_vline(xintercept = 0.3)+ # change color of histogram
+  annotate("text",x=1,y=90,label=paste(kil1," % non-responders"))+
+  theme(legend.title=element_blank()) # remove legend
 
 
 ```
 
 
-So now we see 16.2% in second crossover trial( which are highly correlated with first cross-over trial) are non-responders( response being defined as greater than 0.3 L increase)
+So now we see `r kil1 ` % in second crossover trial( which are highly correlated with first cross-over trial) are non-responders( response being defined as greater than 0.3 L increase)
 
+
+Let us see a table of responder vs non responder in cross over 1 vs crossover 2
+
+```{r}
+
+data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossover2)) %>% 
+  mutate( response1 = case_when(crossover1<0.3 ~ "non-responder",
+                                TRUE~"responder"),response2 = case_when(crossover2<0.3 ~ "non-responder",
+                                TRUE~"responder")) %>% select(response1,response2) %>% group_by(response1,response2) %>% summarise(n=n(),percent = 100*( n() / nrow(.)) )
+```
+
+Note : absolute numbers might vary due to simulation
+Thus we see  that out of ~850 who responded in first 800 responded in second(~95%), while out of ~150 who didnt respond  in first around ~32 did respond it in second trial (~20%) .  ~8.5 % have inconsistent response in this crossover trial with an element of personal response . Thus marginal probability is around ~85%
+
+Let's visualise it
 
 ```{r}
 p = data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossover2)) %>% 
@@ -126,11 +143,10 @@ p = data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossov
   crossover1 <0.3 & crossover2 >0.3 ~"inconsistent",
   crossover1 <0.3 & crossover2 <0.3 ~ "non-responders"
   
-)) %>% ggplot(aes(crossover1,crossover2,color=group))+geom_point()+geom_hline(yintercept=0.3)+geom_vline(xintercept=0.3)+geom_hline(yintercept=0.5)+geom_vline(xintercept=0.5)
+)) %>% ggplot(aes(crossover1,crossover2,color=group))+geom_point()+geom_hline(yintercept=0.3,linetype="dotted")+geom_vline(xintercept=0.3,linetype="dotted")+geom_hline(yintercept=0.5)+geom_vline(xintercept=0.5) 
 
 p
-
-ggExtra::ggMarginal(p, type = "histogram")
+ggExtra::ggMarginal(p,type = "histogram")
 
 
   
@@ -139,19 +155,9 @@ ggExtra::ggMarginal(p, type = "histogram")
 
 
 
-```{r}
-
-data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossover2)) %>% 
-  mutate( response1 = case_when(crossover1<0.3 ~ "non-responder",
-                                TRUE~"responder"),response2 = case_when(crossover2<0.3 ~ "non-responder",
-                                TRUE~"responder")) %>% select(response1,response2) %>% group_by(response1,response2) %>% summarise(n=n(),percent = n() / nrow(.) )
-```
 
 
-
-
-
-Now consider a situation with no element of personal response
+Now consider a situation with **no element of personal response**
 
 ```{r}
 crossover2 = simcor(x=x,r=0.02,m=0.5,s=0.2)
@@ -159,17 +165,32 @@ crossover2 = simcor(x=x,r=0.02,m=0.5,s=0.2)
 
 data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossover2)) %>% mutate( response1 = case_when(crossover1<0.3 ~ "non-responder",
                                 TRUE~"responder"),response2 = case_when(crossover2<0.3 ~ "non-responder",
-                                TRUE~"responder")) %>% select(response1,response2) %>% group_by(response1,response2) %>% summarise(n=n(),percent = n() / nrow(.) )
+                                TRUE~"responder")) %>% select(response1,response2) %>% group_by(response1,response2) %>% summarise(n=n(),percent = 100*( n() / nrow(.)) )
 ```
 
+Note : absolute numbers might vary due to simulation
+Compare this situation to original simulation with no personal response.
+
+Here also marginal probability of response is ~85%
+Thus we see  that out of ~850 who responded in first 714 responded in second(~85%), while out of ~150 who didnt respond  in first around ~23 did respond it in second trial (~20%) 
+
+Thus we see almost there is almost ~25% inconsistent response in these crossover trial as opposed to the case in which there was element of personal response (~8% inconsistency )
+
+"The important point to note is that had we only run one cross-over trial, that is to say only using one period we could not have drawn a scatter plot of response (if this is defined as the difference between treatment with an active treatment and treatment with placebo). All we could
+have drawn is a marginal distribution. However, the marginal distributions on the X axis in scatter diagrams are indistinguishable or at least, given either you could not tell which of the two cases it repre-
+sented " ~ Senn
+
+Thus key to identification is adequate replication.
+
 ```{r}
+
 q = data_frame(crossover1 = as.vector(crossover1),crossover2 = as.vector(crossover2)) %>% mutate(group = case_when(
   crossover1 >0.3 & crossover2 >0.3 ~ "responders",
    crossover1 >0.3 & crossover2 <0.3 ~ "inconsistent",
   crossover1 <0.3 & crossover2 >0.3 ~"inconsistent",
   crossover1 <0.3 & crossover2 <0.3 ~ "non-responders"
   
-)) %>% ggplot(aes(crossover1,crossover2,color=group))+geom_point()+geom_hline(yintercept=0.3)+geom_vline(xintercept=0.3)+geom_hline(yintercept=0.5)+geom_vline(xintercept=0.5)
+)) %>% ggplot(aes(crossover1,crossover2,color=group))+geom_point()+geom_hline(yintercept=0.3,linetype="dotted")+geom_vline(xintercept=0.3,linetype="dotted")+geom_hline(yintercept=0.5)+geom_vline(xintercept=0.5) 
 
 q
 
@@ -178,3 +199,12 @@ ggExtra::ggMarginal(q, type = "histogram")
 
 ```
 
+
+
+### Key points
+1. Avoid using terms like response
+2. It is diffcult to predict "response" by looking at marginal distributions of cross-over trials
+3. Avoid dichotomization
+
+## References
+[Mastering variation](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5054923/)
